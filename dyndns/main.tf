@@ -37,14 +37,6 @@ resource "dns_a_record_set" "api" {
   ttl = 300
 }
 
-resource "dns_ptr_record" "api" {
-  count = var.api_vip != "" ? 1 : 0
-  zone = format("%s.%s.in-addr.arpa.", element(split(".", var.api_vip), 1), element(split(".", var.api_vip), 0))
-  name = format("%s.%s", element(split(".", var.api_vip), 3), element(split(".", var.api_vip), 2))
-  ptr  = format("api.%s.%s.", var.cluster_name, var.dns_domain)
-  ttl  = 300
-}
-
 resource "dns_a_record_set" "api_int" {
   count = var.api_vip != "" ? 1 : 0
   zone = "${var.dns_domain}."
@@ -53,14 +45,6 @@ resource "dns_a_record_set" "api_int" {
     var.api_vip
   ]
   ttl = 300
-}
-
-resource "dns_ptr_record" "api_int" {
-  count = var.api_vip != "" ? 1 : 0
-  zone = format("%s.%s.in-addr.arpa.", element(split(".", var.api_vip), 1), element(split(".", var.api_vip), 0))
-  name = format("%s.%s", element(split(".", var.api_vip), 3), element(split(".", var.api_vip), 2))
-  ptr  = format("api-int.%s.%s.", var.cluster_name, var.dns_domain)
-  ttl  = 300
 }
 
 resource "dns_a_record_set" "apps" {

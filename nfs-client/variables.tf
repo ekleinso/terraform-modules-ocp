@@ -24,17 +24,6 @@ variable "nfs_server_path" {
   description = "NFS Server path"
 }
 
-variable "nfs_server_username" {
-  type = string
-  description = "User for remote NFS access"
-}
-
-variable "nfs_ssh_key" {
-  type = string
-  description = "User for remote NFS access"
-  default = "~/.ssh/id_rsa"
-}
-
 variable "image" {
   type = string
   description = "Docker image to run the server"

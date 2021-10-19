@@ -102,6 +102,12 @@ resource "null_resource" "ocp_cert" {
     command = <<EOF
 set -ex
 
+../binaries/oc -n openshift-config get cm user-ca-bundle >/dev/null 2>&1
+if [[ $? == 1 ]]
+then 
+  ../binaries/oc -n openshift-config create cm user-ca-bundle --from-file=ca-bundle.crt=${path.root}/${var.ca_cert_pem}
+fi
+
 ../binaries/oc patch proxy/cluster --type=merge --patch='{"spec":{"trustedCA":{"name":"user-ca-bundle"}}}'
 ../binaries/oc --namespace openshift-ingress create secret tls custom-cert --cert=${local_file.openshift_app_crt.filename} --key=${local_file.openshift_app_key.filename}
 ../binaries/oc patch --type=merge --namespace openshift-ingress-operator ingresscontrollers/default --patch '{"spec":{"defaultCertificate":{"name":"custom-cert"}}}'

@@ -1,1 +1,1 @@
-# terraform-module-ocp-iscsi
+# terraform-module-ocp-nfs-client

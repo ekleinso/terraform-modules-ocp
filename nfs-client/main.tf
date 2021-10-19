@@ -12,7 +12,6 @@ data "template_file" "k8s_storage_yaml" {
     storage_class = var.storage_class
     is_default_class = var.is_default_class
     project = local.project
-    nfs_server_username = var.nfs_server_username
   }
 }
 
@@ -26,37 +25,40 @@ resource "local_file" "k8s_storage_yaml" {
 resource "null_resource" "config_nfs" {
 
   triggers = {
-    type = "ssh"
-    user = var.nfs_server_username
     server = var.nfs_server
     share = var.nfs_server_path
     cluster_name = var.cluster_id
-    private_key = file(var.nfs_ssh_key)
   }
 
   lifecycle {
-    ignore_changes = [triggers["type"], triggers["user"], triggers["server"], triggers["cluster_name"], triggers["share"], triggers["private_key"]]
+    ignore_changes = [triggers["server"], triggers["cluster_name"], triggers["share"]]
   }
 
-  connection {
-    type     = self.triggers.type
-    user     = self.triggers.user
-    private_key = self.triggers.private_key
-    host     = self.triggers.server
-    agent    = "false"
+  provisioner "local-exec" {
+    command = <<EOF
+set -ex
+
+sudo mkdir -p /tmp/nfsmnt
+sudo mount ${self.triggers.server}:${self.triggers.share} /tmp/nfsmnt
+sudo mkdir -p /tmp/nfsmnt/${self.triggers.cluster_name}
+sudo umount /tmp/nfsmnt
+sudo rm -rf /tmp/nfsmnt
+
+EOF
   }
 
-  provisioner "remote-exec" {
-    inline = [
-      "mkdir -p ${self.triggers.share}/${self.triggers.cluster_name}"
-    ]
-  }
-
-  provisioner "remote-exec" {
+  provisioner "local-exec" {
     when   = destroy
-    inline = [
-      "rm -rf ${self.triggers.share}/${self.triggers.cluster_name}"
-    ]
+    command = <<EOF
+set -ex
+
+sudo mkdir -p /tmp/nfsmnt
+sudo mount ${self.triggers.server}:${self.triggers.share} /tmp/nfsmnt
+sudo rm -rf /tmp/nfsmnt/${self.triggers.cluster_name}
+sudo umount /tmp/nfsmnt
+sudo rm -rf /tmp/nfsmnt
+
+EOF
   }
 
 }

@@ -167,7 +167,7 @@ kind: StorageClass
 metadata:
   labels:
     app: nfs-client-provisioner
-  name: nfs-client
+  name: ${storage_class}
   annotations:
     storageclass.kubernetes.io/is-default-class: "${is_default_class}"
 provisioner: ${cluster_name}/nfs-client-provisioner

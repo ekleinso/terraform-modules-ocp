@@ -12,6 +12,6 @@ variable "user" {
 }
 
 variable "cluster_dir" {
-  default = "ocpadmin"
+  type = string
 }
 

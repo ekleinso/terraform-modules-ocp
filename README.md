@@ -3,7 +3,7 @@ This is a collection of terraform modules that configure OCP.
 
 | module | function        |
 |----------------|--------------|
-| certs   | Configures certificates for the cluster with self-signed certificates. A root CA or intermediate certificate and ke arer neededd |
+| certs   | Configures certificates for the cluster with self-signed certificates. A root CA or intermediate certificate and key are needed |
 | dyndns  | Updates DNS with entries for API and Ingress VIPs as well as cluster hosts |
 | htpasswd | Configures an HTPasswd oAuth identity provider     |
 | iscsi | Configures the opensource [iscsi/targetd provisioner](https://github.com/kubernetes-retired/external-storage/tree/master/iscsi/targetd) |
@@ -12,31 +12,58 @@ This is a collection of terraform modules that configure OCP.
 | nfs-client | Configures the opensource [nfs subdir provisioner](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner) |
 | wait-for | Runs openshift-install wait-for tasks to check OpenShift installation status |
 
+As with most modules you would look at the variables.tf file to determine what the inputs are for the module. Two other inputs of note:
+- The source points to where the module source is located. It can be a local directory or a git source repo.
+- The depends_on variable allows you to create dependencies between resources in scenarios where one resource depends on another but there is no built in dependency through output variables. If dependencies are not needed the parameter can be removed. 
+
 ### Calling certs module
+In the first sample here we are invoking the certs module that configures certificates for the OpenShift ingress and API. 
+
 ```terraform
 module "cluster_certs" {
   source = "github.com/ekleinso/terraform-modules-ocp.git//certs?ref=1.1"
 
-  depends_on = []
+  depends_on = [null_resource.create_cluster]
 
-  cluster_id = local.instance_id
-  cluster_dir = format("%s/%s/installer", abspath(path.root), local.instance_id)
+  cluster_id = "my_cluster_name"
+  cluster_dir = format("%s/%s/installer", abspath(path.root), "my_cluster_name")
 
-  api_vip = local.config.platform.baremetal.apiVIP
-  ingress_vip = local.config.platform.baremetal.ingressVIP
+  api_vip = "192.168.0.200"
+  ingress_vip = "192.168.0.201"
 
-  dns_domain = local.config.baseDomain
+  dns_domain = "example.com"
 
-  ca_cert_pem = "certs/ca.crt.pem"
-  ca_private_key_pem = "certs/ca.key.pem"
+  ca_cert_pem = "/tmp/certs/ca.crt.pem"
+  ca_private_key_pem = "/tmp/certs/ca.key.pem"
 }
 ```
 
+#### terraform variables
+
+| Variable                         | Description                                                  | Type   | Default |
+| -------------------------------- | ------------------------------------------------------------ | ------ | ------- |
+| cluster_id                   | The ID/Name of the cluster  | string | - |
+| cluster_dir                  | The directory where the openshift-install command was executed. Should contain the auth folder username        | string | - |
+| api_vip                      | The VIP for the OpenShift API servers | string | - |
+| ingress_vip                  | The VIP for the OpenShift ingress | string | - |
+| dns_domain                   | The base DNS Domain name    | string | - |
+| ca_cert_chain                | Location of the user provided root CA certificate chain in the repo | string | - |
+| ca_cert_pem                  | Location of the user provided root CA certificate in the repo | string | - |
+| ca_private_key_pem           | Location of the user provided root CA certificate key in the repo | string | - |
+| private_key_algorithm        | The name of the algorithm to use for private keys. Must be one of: RSA or ECDSA. | string | RSA |
+| private_key_ecdsa_curve      | he name of the elliptic curve to use. Should only be used if var.private_key_algorithm is ECDSA. Must be one of P224, P256, P384 or P521. | string | P256 |
+| private_key_rsa_bits        | The size of the generated RSA key in bits. Should only be used if var.private_key_algorithm is RSA. | string | 4096 |
+| allowed_uses                | ist of keywords from RFC5280 describing a use that is permitted for the issued certificate. For more info and the list of keywords, see https://www.terraform.io/docs/providers/tls/r/self_signed_cert.html#allowed_uses. | list | "key_encipherment", "digital_signature" |
+| validity_period_hours       | The number of hours after initial issuing that the certificate will become invalid. | string | 17520 |
+
 ### Calling dyndns module
+This module configures DNS if the DNS server allows dynamic updating. 
+
 ```terraform
 module "cluster_dns" {
   source = "github.com/ekleinso/terraform-modules-ocp.git//dyndns?ref=1.1"
 
+  # This is joining lists and combining the lists into a map
   hostnames_ip_addresses = zipmap(
     concat(
       var.control_ip_addresses,
@@ -50,19 +77,36 @@ module "cluster_dns" {
     )
   )
 
-  cluster_name = var.cluster_id
-  dns_server = var.dns["server"]
-  dns_domain = var.base_domain
-  key_name = var.dns["key_name"]
-  key_algorithm = var.dns["key_algorithm"]
-  key_secret = var.dns["key_secret"]
+  cluster_name = "my_cluster_name"
+  dns_server = "192.168.0.1"
+  dns_domain = "example.com"
 
-  api_vip = var.openshift_api_virtualip
-  ingress_vip = var.openshift_ingress_virtualip
+  # These parameters all come from the DNS server
+  key_name = "ns1.example.com."
+  key_algorithm = "hmac-md5"
+  key_secret = "qgQiMOb/hi4RDBoyibojTw=="
+
+  api_vip = "192.168.0.200"
+  ingress_vip = "192.168.0.201"
 }
 ```
+#### terraform variables
+
+| Variable                         | Description                                                  | Type   | Default |
+| -------------------------------- | ------------------------------------------------------------ | ------ | ------- |
+| cluster_name                 | The ID/Name of the cluster  | string | - |
+| hostnames_ip_addresses                  | A map of hostnames and IP addresses. IP address is key and hostname is value        | map | - |
+| api_vip                      | The VIP for the OpenShift API servers | string | - |
+| ingress_vip                  | The VIP for the OpenShift ingress | string | - |
+| dns_domain                   | The base DNS Domain name    | string | - |
+| dns_server                   | DNS server to provide dynDNS updates | string | - |
+| key_name                     | Name of the key for DynDNS updates | string | - |
+| key_algorithm                | key algorithm for DynDNS updates | string | - |
+| key_secret                   | The secret key for DynDNS updates. | string | - |
 
 ### Calling htpasswd module
+This module configures the HTPasswd identity provider enabling a simple local login for when kubeadmin is removed.
+
 ```terraform
 module "cluster_htpasswd" {
   source = "github.com/ekleinso/terraform-modules-ocp.git//htpasswd?ref=1.1"
@@ -74,98 +118,61 @@ module "cluster_htpasswd" {
   user = "ocpadmin"
 }
 ```
+#### terraform variables
+
+| Variable                         | Description                                                  | Type   | Default |
+| -------------------------------- | ------------------------------------------------------------ | ------ | ------- |
+| password                 | The password for the specified user. | string | "" |
+| random_password_length   | If a password is not specified a random password will be generated using the length specified here | number | 24 |
+| user                      | The user to specifiy for htpasswd | string | ocpadmin |
+| cluster_dir                  | The directory where the openshift-install command was executed. Should contain the auth folder username. The password will be copied to a file here <username>-password     | string | - |
 
 ### Calling iscsi module
+This module configures the iSCSI provisioner using [iscsi/targetd provisioner](https://github.com/kubernetes-retired/external-storage/tree/master/iscsi/targetd). It expects that the iSCSI target is configured and targetd is running. The provided link has good documentation on configuring the iSCSI server.
+
+The configuration requires the WWN of all the iSCSI initiators. It is found in the **/etc/iscsi/initiatorname.iscsi** file on each node in the cluster. This information either needs to be collected from all the nodes or it is possible to update the initiator names on all the nodes using machine configs.
+
 ```terraform
-locals {
-  iscsi_server = "192.168.0.9"
-  iscsi_port = "3260"
-  iscsi_block_pool = "vg_targetd/thinpoollv"
-  iscsi_tgt_wwn = "iqn.2003-01.org.linux-iscsi.host:tgt1"
-  tgtd_user = "admin"
-  tgtd_password = "**********"
-  iscsi_initiators = join(",", [for idx in range(length(local.config.platform.baremetal.hosts)) : format("%s:%s", local.wwn, element(split("-", local.config.platform.baremetal.hosts[idx].name), 2))])
-  wwn = format("iqn.%s.%s.%s", formatdate("YYYY-MM", timestamp()), join(".", reverse(split(".", local.config.baseDomain))), local.instance_id)
-}
 
 module "cluster_iscsi_storage" {
   source = "github.com/ekleinso/terraform-modules-ocp.git//iscsi?ref=1.1"
 
   depends_on = []
 
-  cluster_id = local.instance_id
-  cluster_dir = format("%s/%s/installer", abspath(path.root), local.instance_id)
+  cluster_id = "my_cluster_name"
+  cluster_dir = format("%s/%s/installer", abspath(path.root), "my_cluster_name")
 
-  storage_class = format("%s-block", local.instance_id)
-  server = local.iscsi_server
-  port = local.iscsi_port
-  volumegroup = local.iscsi_block_pool
-  wwn = local.iscsi_tgt_wwn
-  initiators = local.iscsi_initiators
+  storage_class = format("%s-block", "my_cluster_name")
+  server = "192.168.0.9"
+  port = "3260"
+  volumegroup = "vg_targetd/thinpoollv"
+  wwn = "iqn.2003-01.org.linux-iscsi.host:tgt1"
+  initiators = "iqn.2003-01.org.linux-iscsi.host:master1,iqn.2003-01.org.linux-iscsi.host:master2,iqn.2003-01.org.linux-iscsi.host:master3,iqn.2003-01.org.linux-iscsi.host:worker1"
 
-  user = local.tgtd_user
-  password = local.tgtd_password
+  user = "admin"
+  password = "**********"
   is_default_class = "false"
 }
-
-data "template_file" "worker_iscsi_config" {
-  template = <<EOF
-apiVersion: machineconfiguration.openshift.io/v1
-kind: MachineConfig
-metadata:
-  labels:
-    machineconfiguration.openshift.io/role: worker
-  name: 99-worker-regenerate-iscsi-initiatorname
-spec:
-  config:
-    ignition:
-      version: 3.2.0
-    systemd:
-      units:
-      - name: coreos-regenerate-iscsi-initiatorname.service
-        enabled: true
-        contents: "# Regenerate /etc/iscsi/initiatorname.iscsi at boot\n[Unit]\nDocumentation=https://bugzilla.redhat.com/show_bug.cgi?id=1687722\nBefore=iscsid.service\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/sh -c 'echo \"InitiatorName=${local.wwn}:$$(hostname -s | cut -f3 -d \"-\")\" > /etc/iscsi/initiatorname.iscsi'\nRemainAfterExit=yes\n[Install]\nWantedBy=multi-user.target"
-EOF
-}
-
-data "template_file" "master_iscsi_config" {
-  template = <<EOF
-apiVersion: machineconfiguration.openshift.io/v1
-kind: MachineConfig
-metadata:
-  labels:
-    machineconfiguration.openshift.io/role: master
-  name: 99-master-regenerate-iscsi-initiatorname
-spec:
-  config:
-    ignition:
-      version: 3.2.0
-    systemd:
-      units:
-      - name: coreos-regenerate-iscsi-initiatorname.service
-        enabled: true
-        contents: "# Regenerate /etc/iscsi/initiatorname.iscsi at boot\n[Unit]\nDocumentation=https://bugzilla.redhat.com/show_bug.cgi?id=1687722\nBefore=iscsid.service\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/sh -c 'echo \"InitiatorName=${local.wwn}:$$(hostname -s | cut -f3 -d \"-\")\" > /etc/iscsi/initiatorname.iscsi'\nRemainAfterExit=yes\n[Install]\nWantedBy=multi-user.target"
-EOF
-}
-
-resource "local_file" "worker_iscsi_config" {
-  lifecycle {
-    ignore_changes = [content]
-  }
-  content  = data.template_file.worker_iscsi_config.rendered
-  filename = format("%s/%s/cluster_configs/99_openshift-machineconfig_99-worker-regenerate-iscsi-initiatorname.yaml", path.module, local.instance_id)
-  file_permission = 644
-}
-
-resource "local_file" "master_iscsi_config" {
-  lifecycle {
-    ignore_changes = [content]
-  }
-  content  = data.template_file.master_iscsi_config.rendered
-  filename = format("%s/%s/cluster_configs/99_openshift-machineconfig_99-master-regenerate-iscsi-initiatorname.yaml", path.module, local.instance_id)
-  file_permission = 644
-}
 ```
+
+#### terraform variables
+
+| Variable                         | Description                                                  | Type   | Default |
+| -------------------------------- | ------------------------------------------------------------ | ------ | ------- |
+| cluster_id                   | The ID/Name of the cluster  | string | - |
+| cluster_dir                  | The directory where the openshift-install command was executed. Should contain the auth folder username        | string | - |
+| fstype                 | The filesystem to format the storage with. | string | ext4 |
+| storage_class   | The name of the storage class to be created | string | iscsi |
+| server          | Address/hostname for iSCSI server | string | - |
+| port            | Port for iSCSI server     | string | 3260 |
+| user            | Username for targetd server | string | - |
+| password        | Password for targetd server | string | - |
+| volumegroup     | LVM volume group or logical volume thin pool to carve LUNs | string | - |
+| wwn             | World wide name for iSCSI server | string | - |
+| initiators      | Comma delimitetd list of WWN for the iSCSI initiators (aka worker node wwn) | string | - |
+| image          | Docker image to run the provisioner in OpenShift | string | quay.io/external_storage/iscsi-controller:latest |
+| is_default_class | Should created storage class be the default | string | false |
+
 
 ### Calling ldap module
 ```terraform

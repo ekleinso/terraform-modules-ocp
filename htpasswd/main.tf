@@ -28,7 +28,7 @@ set -ex
 
 binaries/oc create secret generic ${var.user}-secret --from-file=htpasswd=${local_file.htpasswd.filename} -n openshift-config
 
-if [[ "$(cld-5f8d/installer/binaries/oc get oauth.config.openshift.io cluster -o jsonpath='{.spec.identityProviders}')" == "" ]]; then
+if [[ "$(binaries/oc get oauth.config.openshift.io cluster -o jsonpath='{.spec.identityProviders}')" == "" ]]; then
   binaries/oc patch oauth.config.openshift.io cluster --type json --patch '[{"op": "add", "path": "/spec/identityProviders", "value":[{"htpasswd":{"fileData":{"name":"${var.user}-secret"}},"mappingMethod":"claim","name":"${var.user}","type":"HTPasswd"}]}]'
 else
   binaries/oc patch oauth.config.openshift.io cluster --type json --patch '[{"op": "add", "path": "/spec/identityProviders/-", "value": {"htpasswd":{"fileData":{"name":"${var.user}-secret"}},"mappingMethod":"claim","name":"${var.user}","type":"HTPasswd"}}]'

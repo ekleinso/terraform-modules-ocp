@@ -12,7 +12,7 @@ variable "storage_class" {
 variable "volgroup" {
   type = string
   description = "Volume group"
-  default = "lvmvg"
+  default = "openebsvg"
 }
 
 variable "pv" {
